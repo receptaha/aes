@@ -1,9 +1,9 @@
 #ifndef CONSTANTS_H
 #define CONSTANTS_H
 
-extern const int BLOCK_SIZE;
-extern const int KEY_SIZES[3];
-extern const int ROUNDS[3];
-extern const char* BASE_KEY;
-
+const int BLOCK_SIZE;
+const int KEY_SIZES[3];
+const int ROUNDS[3];
+const char* BASE_KEY;
+const u_int8_t s_box_encrypt[16][16];
 #endif
