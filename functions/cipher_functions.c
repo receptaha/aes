@@ -17,3 +17,7 @@ void validate_base_key(const char* base_key) {
         exit(-1);
     }
 }
+
+u_int8_t subByte(u_int8_t byte) {
+    return s_box_encrypt[byte >> 4][(byte << 4) >> 4];
+}
