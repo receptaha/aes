@@ -40,7 +40,7 @@ u_int32_t** key_expension(const char* base_key) {
         printf("Round keys cannot allocated");
         exit(-1);
     }
-    for (int i = 0; i < round_count; i++) {
+    for (int i = 0; i < round_count + 1; i++) {
         round_keys[i] = malloc(sizeof(u_int32_t) * word_count_per_round);
         if (round_keys[i] == NULL) {
             printf("Round keys cannot allocated");
@@ -52,7 +52,6 @@ u_int32_t** key_expension(const char* base_key) {
     for (int i = 0; i < word_count_per_round; i++) {
         round_keys[0][i] = str_to_u_int32_t(sizeof(u_int32_t) * i, base_key);
     }
-
     // Other keys are placing to other rows of the rounds keys
     for (int i = 1; i <= round_count; i++) {
         for (int j = 0; j < word_count_per_round; j++) {
@@ -63,6 +62,7 @@ u_int32_t** key_expension(const char* base_key) {
             }
         }
     }
+
     return round_keys;
 }
 
@@ -91,7 +91,7 @@ u_int32_t g(u_int32_t word, u_int8_t round_number) {
     // SubByte each byte of the left rotated word
     for (int i = 0; i < 4; i++) {
         u_int8_t byte = left_rotated_word << (8 * i);
-        byte >>= 24;
+        byte = byte >> 24;
         sub_byted_word = sub_byted_word | ((u_int32_t) subByte(byte) << (24 - 8 * i));
     }
     // xor subByted word and round constant and return it
