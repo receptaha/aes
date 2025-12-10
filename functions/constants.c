@@ -3,6 +3,7 @@ const int BLOCK_SIZE = 128;
 const int KEY_SIZES[3] = {128, 192, 256};
 const int ROUNDS[3] = {10, 12, 14};
 const char* BASE_KEY = "0123456789012345";
+const u_int8_t irreducible_polynom;
 
 const u_int8_t s_box_encrypt[16][16] = {
     { 99, 124, 119, 123, 242, 107, 111, 197, 48, 1, 103, 43, 254, 215, 171, 118 },
