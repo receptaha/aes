@@ -1,9 +1,8 @@
 #include <string.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include "../headers/cipher_functions.h"
 #include "../headers/constants.h"
-#include "../headers/string_functions.h"
+#include "../headers/file_functions.h"
 
 
 void validate_base_key(const char* base_key) {
@@ -20,7 +19,7 @@ void validate_base_key(const char* base_key) {
     }
 }
 
-u_int32_t** key_expension(const char* base_key) {
+u_int8_t*** key_expension(const char* base_key) {
     unsigned long long base_key_len = strlen(base_key); // possible values : 16, 24, 32
     int word_count_per_round = base_key_len / sizeof(u_int32_t); // possible values : 4, 6, 8
     int round_count = 0;
@@ -35,39 +34,48 @@ u_int32_t** key_expension(const char* base_key) {
         exit(-1);
     }
 
-    u_int32_t** round_keys = malloc(sizeof(u_int32_t*) * (round_count + 1));
+    u_int8_t*** round_keys = malloc(sizeof(u_int8_t**) * (round_count + 1));
     if (round_keys == NULL) {
         printf("Round keys cannot allocated");
         exit(-1);
     }
+
     for (int i = 0; i < round_count + 1; i++) {
-        round_keys[i] = malloc(sizeof(u_int32_t) * word_count_per_round);
+        round_keys[i] = malloc(sizeof(u_int8_t*) * 4);
         if (round_keys[i] == NULL) {
             printf("Round keys cannot allocated");
             exit(-1);
         }
-    }
-
-    // Original key is placing to first row of the round keys
-    for (int i = 0; i < word_count_per_round; i++) {
-        round_keys[0][i] = str_to_u_int32_t(sizeof(u_int32_t) * i, base_key);
-    }
-    // Other keys are placing to other rows of the rounds keys
-    for (int i = 1; i <= round_count; i++) {
-        for (int j = 0; j < word_count_per_round; j++) {
-            if (j == 0) {
-                round_keys[i][j] = round_keys[i-1][0] ^ g(round_keys[i-1][word_count_per_round-1], i);
-            }else {
-                round_keys[i][j] = round_keys[i][j-1] ^ round_keys[i-1][j];
+        for (int j = 0; j < 4; j++) {
+            round_keys[i][j] = malloc(sizeof(u_int8_t) * word_count_per_round);
+            if (round_keys[i][j] == NULL) {
+                printf("Round keys cannot allocated");
+                exit(-1);
             }
         }
     }
 
+    // Original key is placing
+    for (int column = 0; column < word_count_per_round; column++) {
+        for (int row = 0; row < 4; row++) {
+            round_keys[0][row][column] = (u_int8_t) base_key[4 * column + row];
+        }
+    }
+    // Other keys are placing to other rows of the rounds keys
+    for (int round = 1; round <= round_count; round++) {
+        for (int column = 0; column < word_count_per_round; column++) {
+            for (int row = 0; row < 4; row++) {
+                if (column == 0) {
+                    u_int8_t ** g_ = g(round_keys[round-1], round);
+                    round_keys[round][row][column] = round_keys[round-1][row][column] ^ g_[row][word_count_per_round - 1];
+                    free(g_);
+                }else {
+                    round_keys[round][row][column] = round_keys[round-1][row][column] ^ round_keys[round][row][column-1];
+                }
+            }
+        }
+    }
     return round_keys;
-}
-
-u_int32_t left_rotation(u_int32_t word, int byte_count) {
-    return (word << (8 * byte_count)) | (word >> 8 * (sizeof(u_int32_t) - byte_count));
 }
 
 u_int8_t rc(u_int8_t i) {
@@ -83,19 +91,39 @@ u_int8_t rc(u_int8_t i) {
     return result;
 }
 
-u_int32_t g(u_int32_t word, u_int8_t round_number) {
+u_int8_t** g(u_int8_t** state_array, u_int8_t round_number) {
 
-    // 1-byte circular left rotation
-    u_int32_t left_rotated_word = left_rotation(word, 1);
-    u_int32_t sub_byted_word = 0;
-    // SubByte each byte of the left rotated word
+    int word_count_per_round = strlen(BASE_KEY) / sizeof(u_int32_t); // possible values : 4, 6, 8
+
+    u_int8_t** state_array_copy = malloc(sizeof(u_int8_t*) * 4);
+    if (state_array_copy == NULL) exit(-1);
     for (int i = 0; i < 4; i++) {
-        u_int8_t byte = left_rotated_word << (8 * i);
-        byte = byte >> 24;
-        sub_byted_word = sub_byted_word | ((u_int32_t) subByte(byte) << (24 - 8 * i));
+        state_array_copy[i] = malloc(sizeof(u_int8_t) * word_count_per_round);
+        if (state_array_copy[i] == NULL) exit(-1);
     }
-    // xor subByted word and round constant and return it
-    return sub_byted_word ^ ((u_int32_t ) rc(round_number) << 24);
+
+    for (int i = 0; i < 4; i++) {
+        for (int j = 0; j < word_count_per_round; j++) {
+            state_array_copy[i][j] = state_array[i][j];
+        }
+    }
+
+    int last_word_index = word_count_per_round - 1;
+    for (int i = 0; i < 3; i++) {
+        u_int8_t temp = state_array_copy[i][last_word_index];
+        state_array_copy[i][last_word_index] = state_array_copy[(i-1) % 4][last_word_index];
+        state_array_copy[(i-1) % 4][last_word_index] = temp;
+    }
+
+    u_int8_t round_constant = rc(round_number);
+
+    for (int i = 0; i < 4; i++) {
+        state_array_copy[i][last_word_index] = subByte(state_array_copy[i][last_word_index]);
+        if (i == 0) state_array_copy[i][last_word_index] ^= round_constant;
+        else state_array_copy[i][last_word_index] ^= 0x00;
+    }
+
+    return state_array_copy;
 }
 
 u_int8_t subByte(u_int8_t byte) {
@@ -103,6 +131,44 @@ u_int8_t subByte(u_int8_t byte) {
     u_int8_t column = byte << 4;
     column >>= 4;
     return s_box_encrypt[row][column];
+}
+
+void encrpyt_state_array(u_int8_t*** round_keys, u_int8_t** state_array, FILE* output_f) {
+    // elimde bir state array var.
+
+}
+
+void encrypt(u_int8_t*** round_keys, char* input_file, char* output_file) {
+    FILE* input_f = find_file_or_fail(input_file);
+    rewind(input_f);
+
+    FILE* output_f = fopen(output_file, "wb");
+    rewind(output_f);
+    u_int8_t readed_byte;
+    u_int64_t counter = 0;
+
+    u_int8_t** state_array = malloc(sizeof(u_int8_t*) * 4);
+    if (state_array == NULL) {
+        printf("\nState array cannot allocated");
+        exit(-1);
+    }
+
+    for (int i = 0; i < 4; i++) {
+        state_array[i] = malloc(sizeof(u_int8_t) * 4);
+        if (state_array[i] == NULL) {
+            printf("\nState array cannot allocated");
+            exit(-1);
+        }
+    }
+
+    while (fread(&readed_byte, sizeof(u_int8_t), 1, input_f) > 0) {
+        state_array[counter % 4][counter / 4] = readed_byte;
+        counter++;
+        if (counter % 16 == 0) { // state array is ready to encrypt.
+            counter = 0;
+            encrpyt_state_array(round_keys, state_array, output_f);
+        }
+    }
 }
 
 
